@@ -145,6 +145,7 @@ class FaceView extends View implements Camera.PreviewCallback {
 
     private float t1;
     private float t2;
+    private IplImage colorImage1;
 
     public FaceView(FullscreenActivity context) throws IOException {
         super(context);
@@ -177,7 +178,6 @@ class FaceView extends View implements Camera.PreviewCallback {
 
         if (colorImage == null || colorImage.width() != width || colorImage.height() != height) {
             colorImage = IplImage.create(width, height, IPL_DEPTH_32F, 3);
-//			colorImage1 = IplImage.create(width, height, IPL_DEPTH_32F, 4);
             bitmap = Bitmap.createBitmap(colorImage.width(), colorImage.height(), Bitmap.Config.ARGB_8888);
             _temp = new int[(width * height)];
         }
@@ -185,29 +185,43 @@ class FaceView extends View implements Camera.PreviewCallback {
         decodeYUV420SP(_temp, data, width, height);
         colorImage.getIntBuffer().put(_temp);
 //        colorImage=render(colorImage,iv);
-
-
+        //colorImage=render(colorImage,new DoGFilter());
         colorImage = render(render(colorImage, sf), sf1);
-//        IplImage gray = IplImage.create(colorImage.cvSize(), IPL_DEPTH_8U, 1);
-//        cvCvtColor(colorImage, gray, CV_BGR2GRAY);
+//        colorImage=render(colorImage,new EdgeFilter());
+
+        IplImage gray = IplImage.create(colorImage.cvSize(), IPL_DEPTH_8U, 1);
+        cvCvtColor(colorImage, gray, CV_BGR2GRAY);
 //        IplImage edges = IplImage.create(gray.cvSize(), gray.depth(), gray.nChannels());
-//        IplImage temp = IplImage.create(colorImage.cvSize(), colorImage.depth(), colorImage.nChannels());
-////
+//        IplImage temp12 = null;//IplImage.create(colorImage.cvSize(), colorImage.depth(), colorImage.nChannels());
+//
+//        IplImage copy11 = copy(convert32fto8u(colorImage));
+//        copy11 = render(render(copy11, sf), sf1);
+//        cvCvtColor(copy11, gray, CV_BGR2GRAY);
 //        cvSmooth(gray, gray, CV_MEDIAN, MEDIAN_BLUR_FILTER_SIZE, 0, 0, 0);
 //        cvLaplace(gray, edges, LAPLACIAN_FILTER_SIZE);
 //        cvThreshold(edges, edges, 80, 255, CV_THRESH_BINARY_INV);
+//        temp12 = IplImage.create(copy11.cvSize(), copy11.depth(), copy11.nChannels());
 //        for (int i = 0; i < repetitions; i++) {
-//            cvSmooth(colorImage, temp, CV_BILATERAL, ksize, 0, sigmaColor, sigmaSpace);
-//            cvSmooth(temp, colorImage, CV_BILATERAL, ksize, 0, sigmaColor, sigmaSpace);
+//            cvSmooth(copy11, temp12, CV_BILATERAL, ksize, 0, sigmaColor, sigmaSpace);
+//            cvSmooth(temp12, copy11, CV_BILATERAL, ksize, 0, sigmaColor, sigmaSpace);
 //        }
-//        temp = IplImage.create(colorImage.cvSize(), colorImage.depth(), colorImage.nChannels());
-//        cvZero(temp);
-////
-////
-//        cvCopy(colorImage, temp, edges);
-//        sf.setTime(t1 += .02f);
-//        sf1.setTime(t2 += .02f);
-//        colorImage = render(temp, glf);
+//
+//        temp12 = IplImage.create(copy11.cvSize(), copy11.depth(), copy11.nChannels());
+//        cvZero(temp12);
+//
+//        cvCopy(copy11, temp12, edges);
+//        cvCopy(temp12,colorImage,null);
+//        colorImage=convert32fto8u(colorImage);
+//        colorImage=convert8uto32f(colorImage);
+        sf.setTime(t1 += .02f);
+        sf1.setTime(t2 += .02f);
+
+        // IplImage b = render(temp12, glf);
+        // cvSetImageROI(temp12, r);
+        // IplImage copy66 = copy(temp12);
+        // cvResetImageROI(temp12);
+        // b.release();
+//        cf1.showImage(temp12);
 
         postInvalidate();
     }
@@ -246,6 +260,18 @@ class FaceView extends View implements Camera.PreviewCallback {
                 rgb[yp] = 0xff000000 | ((b << 6) & 0xff0000) | ((g >> 2) & 0xff00) | ((r >> 10) & 0xff);
             }
         }
+    }
+
+    public IplImage convert32fto8u(IplImage image){
+        IplImage gray = IplImage.create(image.cvSize(), IPL_DEPTH_8U, image.nChannels());
+        cvConvertScale(image, gray, 1d/255d,0);
+        return gray;
+    }
+
+    public IplImage convert8uto32f(IplImage image){
+        IplImage gray = IplImage.create(image.cvSize(), IPL_DEPTH_32F, image.nChannels());
+        cvConvertScale(image, gray, 255,0);
+        return gray;
     }
 
     public static IplImage render(IplImage image, com.jabistudio.androidjhlabs.filter.util.BaseFilter rf) {
