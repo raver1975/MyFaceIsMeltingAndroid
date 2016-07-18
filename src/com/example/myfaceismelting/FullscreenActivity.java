@@ -146,13 +146,13 @@ class FaceView extends View implements Camera.PreviewCallback {
         Loader.load(opencv_objdetect.class);
         sf.setAmount(20f);
         sf.setTurbulence(1f);
-        sf.setEdgeAction(sf.CLAMP);
-        sf1.setEdgeAction(sf1.CLAMP);
+        sf.setEdgeAction(TransformFilter.BILINEAR);
+        sf1.setEdgeAction(TransformFilter.BILINEAR);
         sf1.setAmount(30f);
         sf1.setTurbulence(1f);
-        sf1.setScale(300);
-        sf1.setStretch(50);
-        glf.setNumLevels(100);
+        sf1.setScale(100);
+        sf1.setStretch(10);
+        glf.setNumLevels(16);
     }
 
     public void onPreviewFrame(final byte[] data, final Camera camera) {
@@ -177,11 +177,17 @@ class FaceView extends View implements Camera.PreviewCallback {
 
         decodeYUV420SP(_temp, data, width, height);
         cameraImage.getIntBuffer().put(_temp);
-        IplImage swimImage32f = render(render(cameraImage, sf), sf1);
-        renderImage=render(swimImage32f,glf);
+        renderImage = render(render(cameraImage, sf), sf1);
+        //renderImage=render(renderImage,glf);
+//        renderImage=render(renderImage,new GrayscaleFilter());
 
 //        IplImage swimImage8u = IplImage.create(swimImage32f.cvSize(), IPL_DEPTH_8U, swimImage32f.nChannels());
 //        convertScale(swimImage32f, swimImage8u);
+//        System.out.println("swim32="+swimImage32f.depth());
+//        System.out.println("swim8="+swimImage8u.depth());
+//        System.out.println("renderImage="+renderImage.depth());
+//        System.out.println("cameraImage="+cameraImage.depth());
+//        convertScale(swimImage8u,renderImage);
 //        IplImage gray = IplImage.create(swimImage8u.cvSize(), IPL_DEPTH_8U, 1);
 ////
 //        IplImage edges = IplImage.create(gray.cvSize(), gray.depth(), gray.nChannels());
@@ -207,8 +213,8 @@ class FaceView extends View implements Camera.PreviewCallback {
 //        renderImage=temp1;
 
 
-        sf.setTime(t1 += .02f);
-        sf1.setTime(t2 += .02f);
+        sf.setTime(t1 += .1f);
+        sf1.setTime(t2 += .1f);
         postInvalidate();
     }
 
@@ -249,11 +255,14 @@ class FaceView extends View implements Camera.PreviewCallback {
     }
 
     public static void convertScale(IplImage src, IplImage dst) {
-        double scale = 1.0;
-        if (src.depth() == IPL_DEPTH_32F && dst.depth() == IPL_DEPTH_8U)
+        double scale = 0.0;
+        if (src.depth() == IPL_DEPTH_32F && dst.depth() == IPL_DEPTH_8U) {
             scale = 255;
-        if (src.depth() == IPL_DEPTH_8U && dst.depth() == IPL_DEPTH_32F)
-            scale = 1. / 255;
+        }
+        if (src.depth() == IPL_DEPTH_8U && dst.depth() == IPL_DEPTH_32F) {
+            scale = 1f / 255f;
+        }
+//        System.out.println(scale);
         cvConvertScale(src, dst, scale, 0);
     }
 
@@ -329,13 +338,19 @@ class Preview extends SurfaceView implements SurfaceHolder.Callback {
     public void surfaceCreated(SurfaceHolder holder) {
         // The Surface has been created, acquire the camera and tell it where
         // to draw.
-        mCamera = Camera.open();
+        mCamera = Camera.open(1);
         try {
             mCamera.setPreviewDisplay(holder);
         } catch (IOException exception) {
             mCamera.release();
             mCamera = null;
-            // TODO: add more exception handling logic here
+            mCamera = Camera.open(0);
+            try {
+                mCamera.setPreviewDisplay(holder);
+            } catch (IOException exception1) {
+                mCamera.release();
+                mCamera = null;
+            }
         }
     }
 
@@ -393,7 +408,7 @@ class Preview extends SurfaceView implements SurfaceHolder.Callback {
                 optimalSize = size;
             }
         }
-        System.out.println(optimalSize);
+//        System.out.println(optimalSize);
         return optimalSize;
     }
 
