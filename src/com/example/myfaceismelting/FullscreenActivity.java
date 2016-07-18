@@ -213,8 +213,8 @@ class FaceView extends View implements Camera.PreviewCallback {
 //        renderImage=temp1;
 
 
-        sf.setTime(t1 += .1f);
-        sf1.setTime(t2 += .1f);
+        sf.setTime(t1 += .03f);
+        sf1.setTime(t2 += .03f);
         postInvalidate();
     }
 
