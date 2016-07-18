@@ -178,7 +178,7 @@ class FaceView extends View implements Camera.PreviewCallback {
         decodeYUV420SP(_temp, data, width, height);
         cameraImage.getIntBuffer().put(_temp);
         IplImage swimImage32f = render(render(cameraImage, sf), sf1);
-        renderImage=copy(swimImage32f);
+        renderImage=render(swimImage32f,glf);
 
 //        IplImage swimImage8u = IplImage.create(swimImage32f.cvSize(), IPL_DEPTH_8U, swimImage32f.nChannels());
 //        convertScale(swimImage32f, swimImage8u);
