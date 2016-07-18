@@ -48,10 +48,8 @@
 
 package com.example.myfaceismelting;
 
-import static com.googlecode.javacv.cpp.opencv_core.*;
-import static com.googlecode.javacv.cpp.opencv_imgproc.*;
-
 import java.io.IOException;
+import java.nio.IntBuffer;
 import java.util.List;
 
 import android.app.Activity;
@@ -69,9 +67,6 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 
-import com.googlecode.javacpp.Loader;
-import com.googlecode.javacv.cpp.opencv_core.IplImage;
-import com.googlecode.javacv.cpp.opencv_objdetect;
 import com.jabistudio.androidjhlabs.filter.*;
 import com.jabistudio.androidjhlabs.filter.util.*;
 
@@ -114,8 +109,7 @@ public class FullscreenActivity extends Activity {
 
 class FaceView extends View implements Camera.PreviewCallback {
 
-    private IplImage cameraImage;
-    private Bitmap bitmap;
+
     int[] _temp = null;
 
     int EDGES_THRESHOLD = 70;
@@ -137,13 +131,13 @@ class FaceView extends View implements Camera.PreviewCallback {
 
     private float t1;
     private float t2;
-    private IplImage renderImage;
+    private Bitmap cameraImage;
+    private Bitmap renderImage;
 
     public FaceView(FullscreenActivity context) throws IOException {
         super(context);
 
         // Preload the opencv_objdetect module to work around a known bug.
-        Loader.load(opencv_objdetect.class);
         sf.setAmount(20f);
         sf.setTurbulence(1f);
         sf.setEdgeAction(TransformFilter.BILINEAR);
@@ -168,15 +162,17 @@ class FaceView extends View implements Camera.PreviewCallback {
     protected void processImage(byte[] data, int width, int height) {
         // First, downsample our image and convert it into a grayscale IplImage
 
-        if (cameraImage == null || cameraImage.width() != width || cameraImage.height() != height) {
-            cameraImage = IplImage.create(width, height, IPL_DEPTH_32F, 3);
-            renderImage = IplImage.create(width, height, IPL_DEPTH_32F, 3);
-            bitmap = Bitmap.createBitmap(cameraImage.width(), cameraImage.height(), Bitmap.Config.ARGB_8888);
+        if (cameraImage == null || cameraImage.getWidth() != width || cameraImage.getHeight() != height) {
+//            cameraImage = IplImage.create(width, height, IPL_DEPTH_32F, 3);
+//            renderImage = IplImage.create(width, height, IPL_DEPTH_32F, 3);
+            cameraImage=Bitmap.createBitmap(width,height, Bitmap.Config.ARGB_8888);
+//            bitmap = Bitmap.createBitmap(cameraImage.width(), cameraImage.height(), Bitmap.Config.ARGB_8888);
             _temp = new int[(width * height)];
         }
 
         decodeYUV420SP(_temp, data, width, height);
-        cameraImage.getIntBuffer().put(_temp);
+        cameraImage.copyPixelsFromBuffer(IntBuffer.wrap(_temp));
+//        cameraImage.getIntBuffer().put(_temp);
         renderImage = render(render(cameraImage, sf), sf1);
         //renderImage=render(renderImage,glf);
 //        renderImage=render(renderImage,new GrayscaleFilter());
@@ -254,48 +250,47 @@ class FaceView extends View implements Camera.PreviewCallback {
         }
     }
 
-    public static void convertScale(IplImage src, IplImage dst) {
-        double scale = 0.0;
-        if (src.depth() == IPL_DEPTH_32F && dst.depth() == IPL_DEPTH_8U) {
-            scale = 255;
-        }
-        if (src.depth() == IPL_DEPTH_8U && dst.depth() == IPL_DEPTH_32F) {
-            scale = 1f / 255f;
-        }
-//        System.out.println(scale);
-        cvConvertScale(src, dst, scale, 0);
+//    public static void convertScale(IplImage src, IplImage dst) {
+//        double scale = 0.0;
+//        if (src.depth() == IPL_DEPTH_32F && dst.depth() == IPL_DEPTH_8U) {
+//            scale = 255;
+//        }
+//        if (src.depth() == IPL_DEPTH_8U && dst.depth() == IPL_DEPTH_32F) {
+//            scale = 1f / 255f;
+//        }
+////        System.out.println(scale);
+//        cvConvertScale(src, dst, scale, 0);
+//    }
+
+    public static Bitmap render(Bitmap image, BaseFilter rf) {
+
+        int[] bl = rf.filter(AndroidUtils.bitmapToIntArray(image), image.getWidth(), image.getHeight());
+        Bitmap bm = Bitmap.createBitmap(
+                bl, 0, image.getWidth(), image.getWidth(), image.getHeight(), Bitmap.Config.ARGB_8888);
+        return bm;
     }
 
-    public static IplImage render(IplImage image, com.jabistudio.androidjhlabs.filter.util.BaseFilter rf) {
-        Bitmap bm = IplImageToBitmap(image);
-        int[] bl = rf.filter(AndroidUtils.bitmapToIntArray(bm), bm.getWidth(), bm.getHeight());
-        bm = Bitmap.createBitmap(
-                bl, 0, bm.getWidth(), bm.getWidth(), bm.getHeight(), Bitmap.Config.ARGB_8888);
-        IplImage im = bitmapToIplImage(bm);
-        return im;
-    }
-
-    public static IplImage copy(IplImage image) {
-        IplImage copy = null;
-        if (image.roi() != null)
-            copy = IplImage.create(image.roi().width(), image.roi().height(), image.depth(), image.nChannels());
-        else
-            copy = IplImage.create(image.cvSize(), image.depth(), image.nChannels());
-        cvCopy(image, copy);
-        return copy;
-    }
-
-    public static Bitmap IplImageToBitmap(IplImage image) {
-        Bitmap bitmap = Bitmap.createBitmap(image.width(), image.height(), Bitmap.Config.ARGB_8888);
-        bitmap.copyPixelsFromBuffer(image.getByteBuffer());
-        return bitmap;
-    }
-
-    public static IplImage bitmapToIplImage(Bitmap bm) {
-        IplImage image = IplImage.create(bm.getWidth(), bm.getHeight(), IPL_DEPTH_32F, 3);
-        bm.copyPixelsToBuffer(image.getByteBuffer());
-        return image;
-    }
+//    public static IplImage copy(IplImage image) {
+//        IplImage copy = null;
+//        if (image.roi() != null)
+//            copy = IplImage.create(image.roi().width(), image.roi().height(), image.depth(), image.nChannels());
+//        else
+//            copy = IplImage.create(image.cvSize(), image.depth(), image.nChannels());
+//        cvCopy(image, copy);
+//        return copy;
+//    }
+//
+//    public static Bitmap IplImageToBitmap(IplImage image) {
+//        Bitmap bitmap = Bitmap.createBitmap(image.width(), image.height(), Bitmap.Config.ARGB_8888);
+//        bitmap.copyPixelsFromBuffer(image.getByteBuffer());
+//        return bitmap;
+//    }
+//
+//    public static IplImage bitmapToIplImage(Bitmap bm) {
+//        IplImage image = IplImage.create(bm.getWidth(), bm.getHeight(), IPL_DEPTH_32F, 3);
+//        bm.copyPixelsToBuffer(image.getByteBuffer());
+//        return image;
+//    }
 
     @Override
     protected void onDraw(Canvas canvas) {
@@ -307,9 +302,9 @@ class FaceView extends View implements Camera.PreviewCallback {
         float textWidth = paint.measureText(s);
         canvas.drawText(s, (getWidth() - textWidth) / 2, 20, paint);
 
-        if (renderImage != null && !renderImage.isNull()) {
-            bitmap.copyPixelsFromBuffer(renderImage.getByteBuffer());
-            canvas.drawBitmap(bitmap, null, new RectF(0, 0, FullscreenActivity.width, FullscreenActivity.height), null);
+        if (renderImage != null ) {
+//            bitmap.copyPixelsFromBuffer(renderImage.getByteBuffer());
+            canvas.drawBitmap(renderImage, null, new RectF(0, 0, FullscreenActivity.width, FullscreenActivity.height), null);
         } else {
             System.out.println("renderimage is null!");
         }
