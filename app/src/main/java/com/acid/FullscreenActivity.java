@@ -49,7 +49,6 @@
 package com.acid;
 
 import java.io.IOException;
-import java.nio.IntBuffer;
 import java.util.List;
 
 import android.app.Activity;
@@ -67,8 +66,23 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 
+import boofcv.abst.segmentation.ImageSuperpixels;
+import boofcv.alg.color.ColorRgb;
+import boofcv.alg.filter.blur.GBlurImageOps;
+import boofcv.alg.segmentation.ComputeRegionMeanColor;
+import boofcv.alg.segmentation.ImageSegmentationOps;
+import boofcv.android.ConvertBitmap;
+import boofcv.android.VisualizeImageData;
+import boofcv.core.encoding.ConvertNV21;
+import boofcv.factory.segmentation.ConfigFh04;
+import boofcv.factory.segmentation.FactoryImageSegmentation;
+import boofcv.factory.segmentation.FactorySegmentationAlg;
+import boofcv.struct.feature.ColorQueue_F32;
+import boofcv.struct.image.*;
 import com.jabistudio.androidjhlabs.filter.*;
 import com.jabistudio.androidjhlabs.filter.util.*;
+import org.ddogleg.struct.FastQueue;
+import org.ddogleg.struct.GrowQueue_I32;
 //import org.bytedeco.javacpp.opencv_core;
 //import org.bytedeco.javacpp.opencv_core.IplImage;
 //import org.bytedeco.javacv.AndroidFrameConverter;
@@ -139,7 +153,7 @@ class FaceView extends View implements Camera.PreviewCallback {
 
     private float t1;
     private float t2;
-    private Bitmap cameraImageB;
+    private Bitmap cameraImageBitmap;
     private Bitmap renderImageB;
 
     //private IplImage renderImageI;
@@ -173,29 +187,108 @@ class FaceView extends View implements Camera.PreviewCallback {
         }
     }
 
+    /**
+     * Segments and visualizes the image
+     */
+    public <T extends ImageBase> void performSegmentation(ImageSuperpixels<T> alg , T color )
+    {
+        // Segmentation often works better after blurring the image.  Reduces high frequency image components which
+        // can cause over segmentation
+        GBlurImageOps.gaussian(color, color, 0.5, -1, null);
+
+        // Storage for segmented image.  Each pixel will be assigned a label from 0 to N-1, where N is the number
+        // of segments in the image
+        GrayS32 pixelToSegment = new GrayS32(color.width,color.height);
+
+        // Segmentation magic happens here
+        alg.segment(color,pixelToSegment);
+
+        // Displays the results
+        visualize(pixelToSegment,color,alg.getTotalSuperpixels());
+    }
+
+    /**
+     * Visualizes results three ways.  1) Colorized segmented image where each region is given a random color.
+     * 2) Each pixel is assigned the mean color through out the region. 3) Black pixels represent the border
+     * between regions.
+     */
+    public  <T extends ImageBase>
+    void visualize(GrayS32 pixelToRegion , T color , int numSegments  )
+    {
+        // Computes the mean color inside each region
+        ImageType<T> type = color.getImageType();
+        ComputeRegionMeanColor<T> colorize = FactorySegmentationAlg.regionMeanColor(type);
+
+        FastQueue<float[]> segmentColor = new ColorQueue_F32(type.getNumBands());
+        segmentColor.resize(numSegments);
+
+        GrowQueue_I32 regionMemberCount = new GrowQueue_I32();
+        regionMemberCount.resize(numSegments);
+
+        ImageSegmentationOps.countRegionPixels(pixelToRegion, numSegments, regionMemberCount.data);
+        colorize.process(color,pixelToRegion,regionMemberCount,segmentColor);
+
+
+        Bitmap outColor=Bitmap.createBitmap(pixelToRegion.width,pixelToRegion.height, Bitmap.Config.ARGB_8888);
+        Bitmap outSegments=Bitmap.createBitmap(pixelToRegion.width,pixelToRegion.height, Bitmap.Config.ARGB_8888);
+        Bitmap outBorder=Bitmap.createBitmap(pixelToRegion.width,pixelToRegion.height, Bitmap.Config.ARGB_8888);
+
+//         Draw each region using their average color
+        VisualizeImageData.regionsColor(pixelToRegion,segmentColor,outColor,null);
+//         Draw each region by assigning it a random color
+        VisualizeImageData.regionBorders(pixelToRegion,numSegments,outSegments,null);
+//        BufferedImage outSegments = VisualizeRegions.regions(pixelToRegion, numSegments, null);
+
+        // Make region edges appear red
+        VisualizeImageData.regionBorders(pixelToRegion,0xFF0000,outBorder,null);
+        renderImageB=outColor;
+//        BufferedImage outBorder = new BufferedImage(color.width,color.height,BufferedImage.TYPE_INT_RGB);
+        //ConvertBufferedImage.convertTo(color, outBorder, true);
+        //VisualizeRegions.regionBorders(pixelToRegion,0xFF0000,outBorder);
+
+        // Show the visualization results
+        //ListDisplayPanel gui = new ListDisplayPanel();
+        //gui.addImage(outColor,"Color of Segments");
+      //  gui.addImage(outBorder, "Region Borders");
+       // gui.addImage(outSegments, "Regions");
+      //  ShowImages.showWindow(gui,"Superpixels", true);
+    }
+
     protected void processImage(byte[] data, int width, int height) {
-        // First, downsample our image and convert it into a grayscale IplImage
+        Planar<GrayF32> cameraImageBoof = new Planar<GrayF32>(GrayF32.class,width,height,3);
 
-        if (cameraImageB == null || cameraImageB.getWidth() != width || cameraImageB.getHeight() != height) {
-            //cameraImageI = IplImage.create(width, height, IPL_DEPTH_32F, 3);
-//            renderImage = IplImage.create(width, height, IPL_DEPTH_32F, 3);
-            cameraImageB = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-//            bitmap = Bitmap.createBitmap(cameraImageB.width(), cameraImageB.height(), Bitmap.Config.ARGB_8888);
-            _temp = new int[(width * height)];
-        }
 
-        decodeYUV420SP(_temp, data, width, height);
-        cameraImageB.copyPixelsFromBuffer(IntBuffer.wrap(_temp));
-//        cameraImageI.getIntBuffer().put(_temp);
-        Bitmap swimImageB= render(render(cameraImageB, sf), sf1);
+        //convert camera into cameraImageBoof
+        ConvertNV21.nv21ToMsRgb_F32(data,width,height,cameraImageBoof);
+        cameraImageBitmap = Bitmap.createBitmap(width,height, Bitmap.Config.ARGB_8888);
+        ConvertBitmap.boofToBitmap(cameraImageBoof, cameraImageBitmap,null);
+        Bitmap swimImageBitmap= render(render(cameraImageBitmap, sf), sf1);
+        Planar<GrayF32> swimImageBoof = new Planar<GrayF32>(GrayF32.class,width,height,3);
+        ConvertBitmap.bitmapToBoof(swimImageBitmap, swimImageBoof,null);
+
+        // Select input image type.  Some algorithms behave different depending on image type
+        ImageType<Planar<GrayF32>> imageType = ImageType.pl(3, GrayF32.class);
+//		ImageType<Planar<GrayU8>> imageType = ImageType.pl(3,GrayU8.class);
+//		ImageType<GrayF32> imageType = ImageType.single(GrayF32.class);
+//		ImageType<GrayU8> imageType = ImageType.single(GrayU8.class);
+
+//		ImageSuperpixels alg = FactoryImageSegmentation.meanShift(null, imageType);
+//		ImageSuperpixels alg = FactoryImageSegmentation.slic(new ConfigSlic(400), imageType);
+        ImageSuperpixels alg = FactoryImageSegmentation.fh04(new ConfigFh04(100,30), imageType);
+//		ImageSuperpixels alg = FactoryImageSegmentation.watershed(null,imageType);
+        performSegmentation(alg,swimImageBoof);
+
+
 //        System.out.println("-------------1");
 //        IplImage swimImageI = bitmapToIplImage(swimImageB);
 //        System.out.println("-------------2");
 //        renderImageB = iplImageToBitmap(swimImageI);
 //        System.out.println("-------------3");
 //        renderImageB = swimImageB;
-        //renderImageI = bitmapToIplImage(cameraImageB);
-        renderImageB=swimImageB;
+        //renderImageI = bitmapToIplImage(cameraImageBitmap);
+
+//        renderImageB=swimImageBitmap;
+
         //renderImage=render(renderImage,glf);
 //        renderImage=render(renderImage,new GrayscaleFilter());
 
@@ -204,12 +297,13 @@ class FaceView extends View implements Camera.PreviewCallback {
 //        System.out.println("swim32="+swimImage32f.depth());
 //        System.out.println("swim8="+swimImage8u.depth());
 //        System.out.println("renderImage="+renderImage.depth());
-//        System.out.println("cameraImageB="+cameraImageB.depth());
+//        System.out.println("cameraImageBitmap="+cameraImageBitmap.depth());
 //        convertScale(swimImage8u,renderImage);
 //        IplImage gray = IplImage.create(swimImage8u.cvSize(), IPL_DEPTH_8U, 1);
 ////
 //        IplImage edges = IplImage.create(gray.cvSize(), gray.depth(), gray.nChannels());
 //        IplImage temp = IplImage.create(swimImage8u.cvSize(), swimImage8u.depth(), swimImage8u.nChannels());
+
 //        cvCvtColor(swimImage8u, gray, CV_BGR2GRAY);
 //        cvSmooth(gray, gray, CV_MEDIAN, MEDIAN_BLUR_FILTER_SIZE, 0, 0, 0);
 //        cvLaplace(gray, edges, LAPLACIAN_FILTER_SIZE);
@@ -230,7 +324,12 @@ class FaceView extends View implements Camera.PreviewCallback {
 //        renderImage = render(temp1, glf);
 //        renderImage=temp1;
 
-
+//        GrayU8 gray = new GrayU8(width, height);
+//        GrayU8 edges = new GrayU8(width, height);
+//        Planar<GrayF32> temp = new Planar<GrayF32>(GrayF32.class,width,height,3);
+//
+//        ColorRgb.rgbToGray_Weighted(swimImageB,gray);
+//
         sf.setTime(t1 += .03f);
         sf1.setTime(t2 += .03f);
         postInvalidate();
