@@ -151,8 +151,8 @@ class FaceView extends View implements Camera.PreviewCallback {
         // Preload the opencv_objdetect module to work around a known bug.
         sf.setAmount(20f);
         sf.setTurbulence(1f);
-        sf.setEdgeAction(TransformFilter.ZERO);
-        sf1.setEdgeAction(TransformFilter.RGB_CLAMP);
+        sf.setEdgeAction(TransformFilter.CLAMP);
+        sf1.setEdgeAction(TransformFilter.CLAMP);
 //        sf.setEdgeAction(TransformFilter.RGB_CLAMP);
 //        sf1.setEdgeAction(TransformFilter.RGB_CLAMP);
 
