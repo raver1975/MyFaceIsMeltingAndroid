@@ -57,6 +57,7 @@ import android.content.Context;
 import android.graphics.*;
 import android.hardware.Camera;
 import android.hardware.Camera.Size;
+import android.media.audiofx.Visualizer;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
 import android.view.SurfaceHolder;
@@ -67,20 +68,30 @@ import android.view.WindowManager;
 import android.widget.FrameLayout;
 
 import boofcv.abst.segmentation.ImageSuperpixels;
-import boofcv.alg.color.ColorRgb;
+import boofcv.alg.feature.detect.edge.CannyEdge;
+import boofcv.alg.feature.detect.edge.EdgeContour;
+import boofcv.alg.feature.detect.edge.EdgeSegment;
+import boofcv.alg.filter.binary.BinaryImageOps;
+import boofcv.alg.filter.binary.Contour;
+import boofcv.alg.filter.binary.impl.BinaryThinning;
 import boofcv.alg.filter.blur.GBlurImageOps;
+import boofcv.alg.misc.GPixelMath;
+import boofcv.alg.misc.ImageMiscOps;
 import boofcv.alg.segmentation.ComputeRegionMeanColor;
 import boofcv.alg.segmentation.ImageSegmentationOps;
 import boofcv.android.ConvertBitmap;
 import boofcv.android.VisualizeImageData;
 import boofcv.core.encoding.ConvertNV21;
+import boofcv.factory.feature.detect.edge.FactoryEdgeDetectors;
 import boofcv.factory.segmentation.ConfigFh04;
 import boofcv.factory.segmentation.FactoryImageSegmentation;
 import boofcv.factory.segmentation.FactorySegmentationAlg;
+import boofcv.struct.ConnectRule;
 import boofcv.struct.feature.ColorQueue_F32;
 import boofcv.struct.image.*;
 import com.jabistudio.androidjhlabs.filter.*;
 import com.jabistudio.androidjhlabs.filter.util.*;
+import georegression.struct.point.Point2D_I32;
 import org.ddogleg.struct.FastQueue;
 import org.ddogleg.struct.GrowQueue_I32;
 //import org.bytedeco.javacpp.opencv_core;
@@ -154,7 +165,7 @@ class FaceView extends View implements Camera.PreviewCallback {
     private float t1;
     private float t2;
     private Bitmap cameraImageBitmap;
-    private Bitmap renderImageB;
+    private Bitmap renderImageBitmap;
 
     //private IplImage renderImageI;
     //private IplImage cameraImageI;
@@ -190,21 +201,20 @@ class FaceView extends View implements Camera.PreviewCallback {
     /**
      * Segments and visualizes the image
      */
-    public <T extends ImageBase> void performSegmentation(ImageSuperpixels<T> alg , T color )
-    {
+    public <T extends ImageBase> void performSegmentation(ImageSuperpixels<T> alg, T color) {
         // Segmentation often works better after blurring the image.  Reduces high frequency image components which
         // can cause over segmentation
         GBlurImageOps.gaussian(color, color, 0.5, -1, null);
 
         // Storage for segmented image.  Each pixel will be assigned a label from 0 to N-1, where N is the number
         // of segments in the image
-        GrayS32 pixelToSegment = new GrayS32(color.width,color.height);
+        GrayS32 pixelToSegment = new GrayS32(color.width, color.height);
 
         // Segmentation magic happens here
-        alg.segment(color,pixelToSegment);
+        alg.segment(color, pixelToSegment);
 
         // Displays the results
-        visualize(pixelToSegment,color,alg.getTotalSuperpixels());
+        visualize(pixelToSegment, color, alg.getTotalSuperpixels());
     }
 
     /**
@@ -212,9 +222,8 @@ class FaceView extends View implements Camera.PreviewCallback {
      * 2) Each pixel is assigned the mean color through out the region. 3) Black pixels represent the border
      * between regions.
      */
-    public  <T extends ImageBase>
-    void visualize(GrayS32 pixelToRegion , T color , int numSegments  )
-    {
+    public <T extends ImageBase>
+    void visualize(GrayS32 pixelToRegion, T color, int numSegments) {
         // Computes the mean color inside each region
         ImageType<T> type = color.getImageType();
         ComputeRegionMeanColor<T> colorize = FactorySegmentationAlg.regionMeanColor(type);
@@ -226,22 +235,39 @@ class FaceView extends View implements Camera.PreviewCallback {
         regionMemberCount.resize(numSegments);
 
         ImageSegmentationOps.countRegionPixels(pixelToRegion, numSegments, regionMemberCount.data);
-        colorize.process(color,pixelToRegion,regionMemberCount,segmentColor);
+        colorize.process(color, pixelToRegion, regionMemberCount, segmentColor);
 
 
-        Bitmap outColor=Bitmap.createBitmap(pixelToRegion.width,pixelToRegion.height, Bitmap.Config.ARGB_8888);
-        Bitmap outSegments=Bitmap.createBitmap(pixelToRegion.width,pixelToRegion.height, Bitmap.Config.ARGB_8888);
-        Bitmap outBorder=Bitmap.createBitmap(pixelToRegion.width,pixelToRegion.height, Bitmap.Config.ARGB_8888);
-
+        Bitmap outColor = Bitmap.createBitmap(pixelToRegion.width, pixelToRegion.height, Bitmap.Config.RGB_565);
+//        Bitmap outSegments = Bitmap.createBitmap(pixelToRegion.width, pixelToRegion.height, Bitmap.Config.ARGB_8888);
+//        Bitmap outBorder = Bitmap.createBitmap(pixelToRegion.width, pixelToRegion.height, Bitmap.Config.ARGB_8888);
+//
 //         Draw each region using their average color
-        VisualizeImageData.regionsColor(pixelToRegion,segmentColor,outColor,null);
-//         Draw each region by assigning it a random color
-        VisualizeImageData.regionBorders(pixelToRegion,numSegments,outSegments,null);
+        VisualizeImageData.regionsColor(pixelToRegion, segmentColor, outColor, null);
+        //         Draw each region by assigning it a random color
+//        VisualizeImageData.regionBorders(pixelToRegion, numSegments, outSegments, null);
 //        BufferedImage outSegments = VisualizeRegions.regions(pixelToRegion, numSegments, null);
 
         // Make region edges appear red
-        VisualizeImageData.regionBorders(pixelToRegion,0xFF0000,outBorder,null);
-        renderImageB=outColor;
+
+        VisualizeImageData.regionBorders(pixelToRegion, 0xFFFFFF, outColor, null);
+//renderImageBitmap=outColor;
+//        Bitmap outColorBitmap = Bitmap.createBitmap(outColor.getWidth(), outColor.getHeight(), Bitmap.Config.ARGB_8888);
+//        Planar<GrayU8> outColorBoof = new Planar<GrayU8>(GrayU8.class, outColor.getWidth(), outColor.getHeight(), 3);
+//        GrayU8 outBorderBoof = new GrayU8(outColor.getWidth(), outColor.getHeight());
+//        Planar<GrayU8> out = new Planar<GrayU8>(GrayU8.class, outColor.getWidth(), outColor.getHeight(), 3);
+//
+//        ConvertBitmap.bitmapToBoof(outColor, outColorBoof, null);
+//        ConvertBitmap.bitmapToBoof(outBorder, outBorderBoof, null);
+//
+        //BinaryImageOps.invert(outBorderBoof, outBorderBoof);
+//        BinaryImageOps.logicOr(outColorBoof.getBand(0),outBorderBoof,  out.getBand(0));
+//        BinaryImageOps.logicOr(outColorBoof.getBand(1),outBorderBoof,  out.getBand(1));
+//        BinaryImageOps.logicOr(outColorBoof.getBand(2), outBorderBoof, out.getBand(2));
+//
+//        Bitmap renderImage = Bitmap.createBitmap(outColor.getWidth(), outColor.getHeight(), Bitmap.Config.ARGB_8888);
+//        ConvertBitmap.boofToBitmap(out, renderImage, null);
+//        renderImageBitmap = renderImage;
 //        BufferedImage outBorder = new BufferedImage(color.width,color.height,BufferedImage.TYPE_INT_RGB);
         //ConvertBufferedImage.convertTo(color, outBorder, true);
         //VisualizeRegions.regionBorders(pixelToRegion,0xFF0000,outBorder);
@@ -249,45 +275,65 @@ class FaceView extends View implements Camera.PreviewCallback {
         // Show the visualization results
         //ListDisplayPanel gui = new ListDisplayPanel();
         //gui.addImage(outColor,"Color of Segments");
-      //  gui.addImage(outBorder, "Region Borders");
-       // gui.addImage(outSegments, "Regions");
-      //  ShowImages.showWindow(gui,"Superpixels", true);
+        //  gui.addImage(outBorder, "Region Borders");
+        // gui.addImage(outSegments, "Regions");
+        //  ShowImages.showWindow(gui,"Superpixels", true);
     }
 
     protected void processImage(byte[] data, int width, int height) {
-        Planar<GrayF32> cameraImageBoof = new Planar<GrayF32>(GrayF32.class,width,height,3);
+        Planar<GrayU8> cameraImageBoof = new Planar<GrayU8>(GrayU8.class, width, height, 3);
 
 
         //convert camera into cameraImageBoof
-        ConvertNV21.nv21ToMsRgb_F32(data,width,height,cameraImageBoof);
-        cameraImageBitmap = Bitmap.createBitmap(width,height, Bitmap.Config.ARGB_8888);
-        ConvertBitmap.boofToBitmap(cameraImageBoof, cameraImageBitmap,null);
-        Bitmap swimImageBitmap= render(render(cameraImageBitmap, sf), sf1);
-        Planar<GrayF32> swimImageBoof = new Planar<GrayF32>(GrayF32.class,width,height,3);
-        ConvertBitmap.bitmapToBoof(swimImageBitmap, swimImageBoof,null);
-
+        ConvertNV21.nv21ToMsRgb_U8(data, width, height, cameraImageBoof);
+        cameraImageBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        ConvertBitmap.boofToBitmap(cameraImageBoof, cameraImageBitmap, null);
+        Bitmap swimImageBitmap = render(render(cameraImageBitmap, sf), sf1);
+        Planar<GrayU8> swimImageBoof = new Planar<GrayU8>(GrayU8.class, width, height, 3);
+        ConvertBitmap.bitmapToBoof(swimImageBitmap, swimImageBoof, null);
+//---------------------------------------------------------------------------------------------
         // Select input image type.  Some algorithms behave different depending on image type
-        ImageType<Planar<GrayF32>> imageType = ImageType.pl(3, GrayF32.class);
+//        ImageType<Planar<GrayU8>> imageType = ImageType.pl(3, GrayU8.class);
 //		ImageType<Planar<GrayU8>> imageType = ImageType.pl(3,GrayU8.class);
-//		ImageType<GrayF32> imageType = ImageType.single(GrayF32.class);
+//		ImageType<GrayU8> imageType = ImageType.single(GrayU8.class);
 //		ImageType<GrayU8> imageType = ImageType.single(GrayU8.class);
 
 //		ImageSuperpixels alg = FactoryImageSegmentation.meanShift(null, imageType);
 //		ImageSuperpixels alg = FactoryImageSegmentation.slic(new ConfigSlic(400), imageType);
-        ImageSuperpixels alg = FactoryImageSegmentation.fh04(new ConfigFh04(100,30), imageType);
+//        ImageSuperpixels alg = FactoryImageSegmentation.fh04(new ConfigFh04(100, 30), imageType);
 //		ImageSuperpixels alg = FactoryImageSegmentation.watershed(null,imageType);
-        performSegmentation(alg,swimImageBoof);
-
+//        performSegmentation(alg, swimImageBoof);
+//
+//
+        GrayU8 gray = new GrayU8( width,height);
+        GrayU8 edgeImage = gray.createSameShape();
+        // creates a gray scale image by averaging intensity value across pixels
+        GPixelMath.averageBand(swimImageBoof, gray);
+        CannyEdge<GrayU8,GrayS16> canny = FactoryEdgeDetectors.canny(2,true, true, GrayU8.class, GrayS16.class);
+        canny.process(gray,0.3f,0.1f,edgeImage);
+        List<EdgeContour> edges= canny.getContours();
+        List<Contour> contours = BinaryImageOps.contour(edgeImage, ConnectRule.EIGHT, null);
+        for( int i = 0; i < contours.size(); i++ ) {
+            Contour e = contours.get(i);
+                for( Point2D_I32 p : e.external ) {
+                    swimImageBoof.getBand(0).set(p.x,p.y,0x00);
+                    swimImageBoof.getBand(1).set(p.x,p.y,0x00);
+                    swimImageBoof.getBand(2).set(p.x,p.y,0x00);
+            }
+        }
+        Bitmap bm=Bitmap.createBitmap(width,height, Bitmap.Config.ARGB_8888);
+        ConvertBitmap.boofToBitmap(swimImageBoof,bm,null);
+        renderImageBitmap=bm.copy(Bitmap.Config.ARGB_8888,true);
 
 //        System.out.println("-------------1");
 //        IplImage swimImageI = bitmapToIplImage(swimImageB);
 //        System.out.println("-------------2");
-//        renderImageB = iplImageToBitmap(swimImageI);
+//        renderImageBitmap = iplImageToBitmap(swimImageI);
 //        System.out.println("-------------3");
-//        renderImageB = swimImageB;
+//        renderImageBitmap = swimImageB;
         //renderImageI = bitmapToIplImage(cameraImageBitmap);
 
-//        renderImageB=swimImageBitmap;
+//        renderImageBitmap=swimImageBitmap;
 
         //renderImage=render(renderImage,glf);
 //        renderImage=render(renderImage,new GrayscaleFilter());
@@ -326,7 +372,7 @@ class FaceView extends View implements Camera.PreviewCallback {
 
 //        GrayU8 gray = new GrayU8(width, height);
 //        GrayU8 edges = new GrayU8(width, height);
-//        Planar<GrayF32> temp = new Planar<GrayF32>(GrayF32.class,width,height,3);
+//        Planar<GrayU8> temp = new Planar<GrayU8>(GrayU8.class,width,height,3);
 //
 //        ColorRgb.rgbToGray_Weighted(swimImageB,gray);
 //
@@ -402,7 +448,6 @@ class FaceView extends View implements Camera.PreviewCallback {
 //    }
 
 
-
 //    public static Bitmap iplImageToBitmap(IplImage image) {
 //        AndroidFrameConverter afc=new AndroidFrameConverter();
 //        OpenCVFrameConverter.ToIplImage ofc = new OpenCVFrameConverter.ToIplImage();
@@ -422,9 +467,9 @@ class FaceView extends View implements Camera.PreviewCallback {
         paint.setTextSize(20);
 
 
-        if (renderImageB != null) {
+        if (renderImageBitmap != null) {
 //            bitmap.copyPixelsFromBuffer(renderImage.getByteBuffer());
-            canvas.drawBitmap(renderImageB, new Rect(0, 0, renderImageB.getWidth(), renderImageB.getHeight()), new RectF(-30, -30, FullscreenActivity.width + 60, FullscreenActivity.height + 60), null);
+            canvas.drawBitmap(renderImageBitmap, new Rect(0, 0, renderImageBitmap.getWidth(), renderImageBitmap.getHeight()), new RectF(-30, -30, FullscreenActivity.width + 60, FullscreenActivity.height + 60), null);
 //        } else if (renderImageI != null) {
 //            canvas.drawBitmap(iplImageToBitmap(renderImageI), new Rect(0, 0, renderImageI.width(), renderImageI.height()), new RectF(-30, -30, FullscreenActivity.width + 60, FullscreenActivity.height + 60), null);
         } else {
@@ -529,7 +574,7 @@ class Preview extends SurfaceView implements SurfaceHolder.Callback {
             }
         }
 //        System.out.println(optimalSize);
-        return optimalSize;
+        return secondSize;
     }
 
     public void surfaceChanged(SurfaceHolder holder, int format, int w, int h) {
