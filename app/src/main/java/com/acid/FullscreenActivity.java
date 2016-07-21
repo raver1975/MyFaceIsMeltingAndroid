@@ -475,9 +475,9 @@ class FaceView extends View implements Camera.PreviewCallback {
         } else {
             System.out.println("renderimage is null!");
         }
-        String s = "FacePreview - This side up.";
-        float textWidth = paint.measureText(s);
-        canvas.drawText(s, (getWidth() - textWidth) / 2, 20, paint);
+//        String s = "FacePreview - This side up.";
+//        float textWidth = paint.measureText(s);
+//        canvas.drawText(s, (getWidth() - textWidth) / 2, 20, paint);
     }
 
 }
