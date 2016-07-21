@@ -282,15 +282,13 @@ class FaceView extends View implements Camera.PreviewCallback {
 
     protected void processImage(byte[] data, int width, int height) {
         Planar<GrayU8> cameraImageBoof = new Planar<GrayU8>(GrayU8.class, width, height, 3);
-
-
-        //convert camera into cameraImageBoof
         ConvertNV21.nv21ToMsRgb_U8(data, width, height, cameraImageBoof);
         cameraImageBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         ConvertBitmap.boofToBitmap(cameraImageBoof, cameraImageBitmap, null);
         Bitmap swimImageBitmap = render(render(cameraImageBitmap, sf), sf1);
-        Planar<GrayU8> swimImageBoof = new Planar<GrayU8>(GrayU8.class, width, height, 3);
-        ConvertBitmap.bitmapToBoof(swimImageBitmap, swimImageBoof, null);
+//        Planar<GrayU8> swimImageBoof = new Planar<GrayU8>(GrayU8.class, width, height, 3);
+//        ConvertBitmap.bitmapToBoof(swimImageBitmap, swimImageBoof, null);
+        renderImageBitmap=swimImageBitmap;
 //---------------------------------------------------------------------------------------------
         // Select input image type.  Some algorithms behave different depending on image type
 //        ImageType<Planar<GrayU8>> imageType = ImageType.pl(3, GrayU8.class);
@@ -305,7 +303,8 @@ class FaceView extends View implements Camera.PreviewCallback {
 //        performSegmentation(alg, swimImageBoof);
 //
 //
-        GrayU8 gray = new GrayU8( width,height);
+        //------------------------------------------------------------------------------------
+       /* GrayU8 gray = new GrayU8( width,height);
         GrayU8 edgeImage = gray.createSameShape();
         // creates a gray scale image by averaging intensity value across pixels
         GPixelMath.averageBand(swimImageBoof, gray);
@@ -323,8 +322,8 @@ class FaceView extends View implements Camera.PreviewCallback {
         }
         Bitmap bm=Bitmap.createBitmap(width,height, Bitmap.Config.ARGB_8888);
         ConvertBitmap.boofToBitmap(swimImageBoof,bm,null);
-        renderImageBitmap=bm.copy(Bitmap.Config.ARGB_8888,true);
-
+        renderImageBitmap=bm.copy(Bitmap.Config.ARGB_8888,true);*/
+//-------------------------------------------------------------------------------------
 //        System.out.println("-------------1");
 //        IplImage swimImageI = bitmapToIplImage(swimImageB);
 //        System.out.println("-------------2");
