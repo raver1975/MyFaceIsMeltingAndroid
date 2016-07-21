@@ -376,8 +376,8 @@ class FaceView extends View implements Camera.PreviewCallback {
 //
 //        ColorRgb.rgbToGray_Weighted(swimImageB,gray);
 //
-        sf.setTime(t1 += .03f);
-        sf1.setTime(t2 += .03f);
+        sf.setTime(t1 += .05f);
+        sf1.setTime(t2 += .05f);
         postInvalidate();
     }
 
@@ -574,7 +574,8 @@ class Preview extends SurfaceView implements SurfaceHolder.Callback {
             }
         }
 //        System.out.println(optimalSize);
-        return secondSize;
+//        return secondSize;
+        return optimalSize;
     }
 
     public void surfaceChanged(SurfaceHolder holder, int format, int w, int h) {
